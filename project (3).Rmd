@@ -1,0 +1,400 @@
+---
+output:
+  pdf_document: default
+  html_document: default
+  toc: true
+  toc_depth: 2
+  theme: united 
+---
+```{r setup, include=FALSE}
+library(olsrr)
+library(GGally)
+library(ggplot2)
+library(car)
+library(lmtest)
+library(readxl)
+library(mctest)
+library(Ecdat)
+library(MASS)
+library(cowplot)
+library(gridExtra)
+```
+
+
+![ ](HC.png)
+
+\newpage
+\tableofcontents
+\listoffigures
+\newpage
+
+
+# Introduction  
+
+As climate change due to excessive greenhouse gas emission has become a global issue, the world is exerting more and more efforts to save energy and to reduce CO2 emission. Such efforts are also being applied to buildings, particularly in reducing CO2 emission by lowering the energy consumption of buildings through energy performance improvement.
+
+Keeping a comfortable temperature, accounts for a significant portion of the energy used in the average home, which in turn contributes towards global energy consumption. The global contribution from buildings towards energy consumption, both residential and commercial has steadily increased reaching figures between 20% and 40% in developed countries [1], which raises concerns mainly over exhaustion of energy resources and environmental impact. Also, Growth in population, increasing demand for building services and comfort levels, together with the rise in time spent inside buildings, assure the upward trend in energy demand will continue in the future.
+
+For this reason, energy efficiency in buildings has become a key objective for policies and regulations, many governments impose legal constraints in residential building energy performance [2], making this topic of interest for modelling and analysis. In general, heating load (HL) and cooling load (CL) are two of the most important modes of the energy consumption in buildings, our goal is to model these variables as functions of the parameters of the structure, which include areas of the walls and roof, windows characteristics, and position in relation to the sunlight.
+
+## Objective
+This report aims to explore how the Heating Load of a building is affected by attributes such as wall and roof areas, compactness of the building, glazing area and its distribution and orientation of the building. This variables will be used to fit a suitable model  for prediction if possible.
+
+
+# Methodology  
+
+## Dataset  
+
+The data  was downloaded from the UC Irvine Machine Learning Repository in CSV format[3]. This website maintains data sets as a service to the machine learning community. 
+
+
+We performed this energy analysis using 12 different building shapes. The buildings differ with respect to the glazing area, the glazing area distribution, and the orientation, among other parameters. The data set comprises 768 samples and 8 features, that we used with the goal of modelling the relationship between these attributes and the heating load. 
+
+Below you will find the complete list of variables used:
+
+* Y1: Heating Load ($KWh/m^2$)
+* Y2: Cooling Load ($KWh/m^2$)
+* X1: Relative Compactness
+* X2: Surface Area ($m^2$)
+* X3: Wall Area ($m^2$)
+* X4: Roof Area ($m^2$)
+* X5: Overall Height (m)
+* X6: Orientation (2, 3, 4, 5 stand for “North”, “East”, “South”, “West”)
+* X7: Glazing Area (0.0, 0.1, 0.25, 0.4 stand for 0%, 10%, 25%, 40% of floor area) 
+* X8: Glazing Area Distribution (1,2, 3, 4,5 correspond to “Uniform”, “North”, “East”, “South”, “West”)
+
+
+## Modelling Plan  
+
+We will proceed by applying the methods taught in DATA603. The first step will be to check if there is a correlation between the two response variables. If there is a correlation, we will make a single model, otherwise a model for each response variable will be fit.
+
+The second step will be to fit a linear regression model using all the predictors and test for multicollinearity. If we find that one or more of the independent variables are correlated, we can remove one by one the highly correlated variables while retaining most of the information. Once this process has been done, stepwise regression will be performed to find a model of main effects (additive model).
+
+The third step will be using individual t-test to determine significant high-order terms and interactions. Once we have an estimated model with all the significant high-order and interaction terms, we will proceed with the diagnosis, that is, we will check if there are outliers and if the assumptions of linearity, homoscedasticity, normality, and independence are satisfied.  We aim to do this diagnosis by checking the Cook's distance and leverage, using residual plots, histograms, Q-Q plots, Shapiro-Wilktest and Breusch-Pagan test.
+
+If the results suggest the model does not satisfy these assumptions, we will make transformations in an attempt to improve the model.
+
+## Workload Distribution
+It's agreed upon that each group member will put in equal effort to find and fit their own model to the dataset. After the most suitable selection procedure, final model and diagnostic is determined through group disicussion, the workload will be distributed in presentation slides preparation, presentation and report writing. The workload of the aforementioned tasks is distributed as follow:  
+Deysy - Introduction, Methodology, Conclusions and Recommendation;   
+Yao - Model Selection Procedure;  
+Asiah - Assumption Checking and Diagnostic;  
+All members are responsible for the administrative tasks for presentation and the project report, which includes proof-reading, suggesting changes/edits when they see fit.  
+
+
+# Process and Results  
+
+## Checking Correlation between dependent variables:  
+
+Reading the data set and checking for correlation between response variables:
+
+```{r}
+data =read_excel("ENB2012_data.xlsx")
+cor(data$Y1,data$Y2)
+```
+This result shows that the Heating Load (Y1) and Cooling Load (Y2) are highly correlated, which means typically the ability for a building to remain warm or cool is the same. Therefore we are going to fit a single model using Y1.
+
+## Checking Multicollinearity  
+
+Before proceeding with selection of independent variables, we want to eliminate any potential multicollinearity, with which the coefficient estimates can swing dramatically and become very sensitive to small changes in the model.  VIF is used to determine if there's correlation between two independent variables. It can be computed using the formula:
+$$
+VIF(\hat\beta_{j}) = \frac{1}{1-R^2_{X_{j}|X_{j}}}
+$$
+
+```{r }
+model1 = lm(Y1~X1+X2+X3+X4+X5+factor(X6)+X7+factor(X8),data=data)
+imcdiag(model1, method="VIF")
+```
+
+The result shows an extremely large VIF for X2, X3 and X4. We will start by dropping X2:
+
+```{r}
+model2 = lm(Y1~X1+X3+X4+X5+factor(X6)+X7+factor(X8),data=data)
+imcdiag(model2, method="VIF")
+```
+The second variable with a large VIF is X4, After dropping X4, we test the model again:
+ 
+```{r}
+model3 = lm(Y1~X1+X3+X5+factor(X6)+X7+factor(X8),data=data)
+imcdiag(model3, method="VIF")
+```
+
+After this two variables are dropped, no predictor has a VIF higher than 10. We will use the remaining variables to run a stepwise regression to fit a first-order model.  
+
+## Stepwise Model Selection  
+
+We use the Stepwise Regression Procedure to determine the first order model. At $\alpha = 0.05$, P-value for entering the model is set to 0.1 so that estimators that are barely significant wouldn't be eliminated yet, in case potential significant estimating power can be found in high order terms and interaction terms.
+```{r}
+ols_step_both_p(model3, pent=0.1,prem=0.3, details=FALSE)
+model4 = lm(Y1~X1+X3+X5+X7+factor(X8),data=data)
+summary(model4)
+```
+The result suggests that the remaining 5 predictors (X1,X3,X5,X7 and X8) are significant. At this point, the model has 0.9202 adjusted R-squared and 2.85 RMSE.
+
+## Higher Order Model   
+
+Now we will determine if high order terms need to be added to the model by examining the following plots:  
+```{r, message=FALSE, warning=FALSE, fig.cap="Pairwise Correlation Plots between Independent Variables"}
+red_data = data[,c(1,3,5,7,8,9)]
+ggpairs(red_data,lower = list(continuous = "smooth_loess", combo = "facethist", 
+                          discrete = "facetbar", na = "na"))
+```
+
+From the pairwise correlation plot, a non-linear pattern can be observed between (X1,Y1) and (X3,Y1). Thus, higher order terms of X1, X3 will be added to the first order model until they become insignificant.   
+
+```{r,include=FALSE}
+high1 = lm(Y1~X1+X3+X5+X7+factor(X8)+I(X1^2)+I(X3^2),data=data)
+summary(high1)
+```
+
+```{r,include=FALSE}
+high2 = lm(Y1~X1+X3+X5+X7+factor(X8)+
+ I(X1^2)+I(X1^3)+I(X3^2)+I(X3^3),data=data)
+summary(high2)
+```
+
+```{r,include=FALSE}
+high3 = lm(Y1~X1+X3+X5+X7+factor(X8)+ I(X1^2)+I(X1^3)+
+             I(X3^2)+I(X3^3)+I(X1^4)+I(X3^4),data=data)
+summary(high3)
+```
+
+```{r}
+high4 = lm(Y1~X1+X3+X5+X7+factor(X8)+I(X1^2)+I(X1^3)+
+             I(X3^2)+I(X3^3)+I(X1^4)+I(X3^4)+I(X1^5)+I(X3^5),data=data)
+summary(high4)
+```
+After reaching the fifth order, the estimator X5 starts to lose it's significance. Thus the model will include higher order terms of X1 and X3 up to the forth order.
+```{r}
+summary(high3)
+```
+From the result above, the higher order model has drastically improved the adjusted R-squared from 0.9202 to 0.985.  
+
+
+##  Interaction Model  
+
+Interaction terms will be determined by individual t-tests. We will test all possible interaction terms and remove the insignificant terms.
+
+```{r,echo=FALSE}
+int1 = lm(Y1~(X1+X3+X5+X7+factor(X8))^2,data=data)
+summary(int1)
+```
+
+```{r}
+int2 = lm(Y1~X1+X3+X5+X7+factor(X8)+X1:X3+X1:X5+X1:X7+X3:X5+X3:X7,data=data)
+summary(int2)
+```
+By keeping X1:x3, X1:X5, X1:X7, X3:X5, X3:X7 in the interaction model, the adjusted R-squared has been increase to 0.9353 compared to 0.9202 in the first order model.  
+
+
+## Final Model  
+
+Interaction terms and higher order terms will be combined to form a final model. The interaction term X3:X5 is removed from the model since it's not significant anymore after combining the interaction terms and higher order terms.
+```{r}
+model = lm(Y1~X1 + X3 + X5 + X7 + factor(X8)+
+             X1:X3 + X1:X5 + X1:X7 + X3:X7 + 
+             I(X1^2) + I(X1^3) + I(X3^2) + I(X3^3) + I(X1^4) + I(X3^4),
+           data=data)
+summary(model)
+```
+  
+
+At this point we have the following model:  
+
+$$\widehat{Y_1} = -4090+17520X1 + 76.82X3 + 81.93X5 -51.61X7+4.52X8_1$$
+$$+4.436X8_2 +4.18X8_3 +4.38X8_4 +4.182X8_5 -32730X1^2 + 27140X1^3$$
+$$-0.373X_2^2 + 0.0081X3^3-83660X1^4 -0.000006X3^4$$
+$$-2.5(X1 \times X3) -98.56(X1 \times X5) + 58.73(X1 \times X7) + 740.3(X3 \times X7)$$
+
+
+# Checking Model Assumptions
+
+At this point we perform the six basic assumptions checking for MLR to ensure that our model is reliable and trustworthy. The basic assumptions are:
+
+## Linearity Assumption  
+The linearity assumption assumes that there is a linear relationship between the response variable and the predictors in our model.To verify this, We use residual plots  to identify non-linearity in the data. From the residual plot in figure 2, we can see that there is no discernible pattern in the residuals. Hence, we conclude that the residuals are linear. It means that linearity assumption is met for our final model.
+
+```{r message=FALSE, echo = FALSE,fig.cap="Residual vs Fitted Plot"}
+ggplot(model, aes(x=.fitted, y=.resid)) +
+geom_point(size=0.7) + geom_smooth()+
+geom_hline(yintercept = 0)+ggtitle("Residual vs Fitted values")
+```
+ 
+## Independence Assumption 
+
+Next we check for correlation among the residuals. Refer to the residual versus fitted plot above to confirm the indpendence. We can see that the residuals are not clumped and there are no visible trends, we conclude that the errors are independent. Most importantly our data set is not time related, hence we do not expect errors to be correlated.
+
+
+## Equal Variance Check
+
+It is very important for the error terms in a multiple linear regression to have a constant variance. Next we  test for equal variance by using the spread of residual  over the predicted values, the scale location plot and the Breusch-Pagan test. From the plots shown below(figure 3), the residuals appear to show a cone shaped pattern which indicates that the variances of the error terms increases with the value of their response. Therefore, this is an indication that the data Has nonconstant variance or heteroscedasticity. 
+
+```{r Warning=FALSE, echo=FALSE,message=FALSE fig.cap="Residual vs Fitted Plot, Scale-Location Plot"}
+library(gridExtra)
+a=ggplot(model, aes(x=.fitted, y=.resid)) +
+geom_point(size=0.5) + geom_smooth()+
+geom_hline(yintercept = 0)+ggtitle("Residual vs Fitted values")
+
+#a scale location plot
+b=ggplot(model, aes(x=.fitted, y=sqrt(abs(.stdresid)))) +
+geom_point(size=0.5) + geom_hline(yintercept = 0) +
+geom_smooth()+ ggtitle("Scale-Location plot")
+#grid
+grid.arrange(a,b,ncol=2)
+
+```
+
+To statistically confirm this assumption, we will perform the  Breusch-Pagan test of equal variance. The hypothesis is formulated as:
+
+$$
+\begin{aligned}
+H_0:&\mbox{ heteroscedasticity is not present (homoscedasticity)}\\
+H_a~:&\mbox{ heteroscedasticity is present} \\
+\end{aligned}
+$$
+
+From the results of the Breusch-Pagan test (BP = 169.24, p-value < 2.2e-16), we would reject the null hypothesis and conclude that heteroscedasticity is present. 
+
+
+##  Normality Assumption
+Here we employ a histogram and Q-Q plot to visually access the normality of the residuals. The histogram plot looks quite normal according the binwidth used, but however this is not reliable. The Q-Qplot on the other hand has as many points fitted on the diagonal but however the residuals are heavily deviated from the diagonal in the lower tail, this is an indication of non normality. To confirm this we proceed to statistivcally test normality by applying the Shapiro-Wilk test. We formulate the hypothesis for this test as:  
+
+$$H_0:\text{the sample data are significantly normally distributed}$$
+$$ H_A:\text{the sample data are not significantly normally distributed}$$
+
+```{r,echo=FALSE, fig.cap="Histogram and Q-Q Plot of Residuals for final model"}
+r = ggplot(model, aes(x=.resid)) + geom_histogram(binwidth = 0.1)
+j = ggplot(model,aes(sample=.resid)) + stat_qq() + stat_qq_line()
+grid.arrange(r,j)
+```
+
+The Shapiro-Wilk test yields a value of W = 0.98323 and a corresponding p-value = 1.061e-07. We reject the null hypothesis and conclude that there is enough evidence to support that the residuals are not normally distributed.Therfore our model fails the normality test.
+
+```{r, message=FALSE, include=FALSE}
+#Code for shapiro wilk Test
+shapiro.test(residuals(model))
+```
+
+**Multicollinearity**
+
+The reults of the multicollinearity checked at the first stage of our model selection indicated that the variables in the final model have less to moderate VIF values. Therefore multicollinearity is passed. Results of VIF is shown below:
+
+```{r }
+imcdiag(model3, method="VIF")
+```
+
+
+## Outliers
+
+```{r include=FALSE}
+data[cooks.distance(model)>1,] #have Cook statistics larger than 1
+```
+
+```{r, echo=FALSE, fig.cap="Standardized Residuals vs Leverage Plot "}
+plot(model,which=5)
+```
+
+
+Below is a graph of the Cook's distance plot, overall we can see that point 8 and 272 have high influence but however the value is less than 1 and we therfore consider them as not influencial or minimal.
+
+
+```{r echo=FALSE, fig.cap="Cook's Distance Plot "}
+plot(model,pch=18,col="red",which=c(4))
+```
+
+
+With reference to the above model diagnostics, our results concluded that our model meets the linearity assumption, the independence assumption and the multicolinearity assumption as well as no outlears detected. But however the model failed the equal variance and normality assumption.In attempt to rectify this failure, we proceed to perform the Box-Cox transformation in the next section.
+
+
+## BoxCox Transformation
+
+The results below show the BoxCox transformation applied to our model. One can see in the graph that the best lambda is between a range of 0.7 and 0.9. The best $\lambda$ computed is 0.7878. This value is applied to transform the response variable Y1 and the new model is formed.
+
+```{r echo=FALSE,fig.cap="Box-Cox plot" }
+bc=boxcox(model,lambda=seq(-2,2))
+bestlamda=bc$x[which(bc$y==max(bc$y))]
+bcmodel=lm((((Y1^0.7878)-1)/0.7878)~X1+X3+X5+X7+factor(X8)+X1:X3+X1:X5+X1:X7+X3:X7+I(X1^2)+I(X1^3)+I(X3^2)+I(X3^3)+I(X1^4)+I(X3^4),data=data)
+summary(bcmodel)
+```
+The final model equation after the Box-Cox transformation is:
+
+$$\widehat{Y_1} = -19540+82550X1 + 37.95X3 - 16.97X5 -16.62X7+2.544X8_1$$
+$$+2.495X8_2 +2.364X8_3 +2.469X8_4 +2.36X8_5 -151600X1^2 + 123300X1^3$$
+$$-0.1878X_3^2 +0.0004X3^3-37450X1^4 -0.0000003X3^4$$
+$$-1.366(X1 \times X3) -26.75(X1 \times X5) + 23.2(X1 \times X7) +  0.02371(X3 \times X7)$$
+
+
+The above transformed model yielded a RMSE value of 0.2733 and $R^2_{adj}$ of 0.9972 approximately 99.72% as compared to the initial final model which hada RMSE of 0.5542 and  $R^2_{adj}$ of 0.997,approximately 99.7%. We can observe that  the adjusted r squared of both models are similar but the transformed model has an improved RMSE value. 
+
+Having found the new model we then perform the diagnostics checks again to verify if there are improvements in th new model.  
+
+
+
+### Equal Variance check for the Box-Cox Model:
+From Figure 6, we are still able to see a cone-shaped patter from fiited vs residual plot, and the blue line in scale-location plot is not perfectly horizontal, which indicates that heteroscedasticity is still present. 
+```{r warning=FALSE, message=FALSE, fig.cap="Residual Plot and Scale_location Plot for Box-Cox Model"}
+library(gridExtra)
+e=ggplot(bcmodel, aes(x=.fitted, y=.resid)) +
+geom_point(size=0.5) + geom_smooth()+
+geom_hline(yintercept = 0)+ggtitle("Residual vs Fitted values")
+
+#a scale location plot
+f=ggplot(bcmodel, aes(x=.fitted, y=sqrt(abs(.stdresid)))) +
+geom_point(size=0.5) + geom_hline(yintercept = 0) +
+geom_smooth()+ ggtitle("Scale-Location plot")
+#grid
+grid.arrange(e,f,ncol=2)
+```
+From the Breusch-Pagan test, with p-value still smaller than $\alpha=0.05$, we can conclude that the equal variance assumption still doesn't hold after transformation.
+```{r}
+bptest(bcmodel)
+```
+### Normality check for the Box-Cox Model:
+
+From Figure 7, we can see the histogram of residual looks normal, but points are not perfectly aligned along the reference line in the Q-Q plot.
+```{r, fig.cap="Histogram and Q-Q Plot of Residuals for Box-Cox Model"}
+c = ggplot(bcmodel, aes(x=.resid)) + geom_histogram(binwidth = 0.1)
+d = ggplot(bcmodel,aes(sample=.resid)) + stat_qq() + stat_qq_line()
+grid.arrange(c,d)
+```
+
+From the Shapiro-Wilk test, with p-value still smaller than $\alpha=0.05$, we can conclude that the normality assumption still doesn't hold after transformation.
+```{r}
+shapiro.test(residuals(bcmodel))
+```
+
+From the above checks, the Box-Cox model's linearity and independence assumptions hold. From the BP test results the p-value is = 1.345e-12  and the Shapiro test gives a p-value =  9.264e-12. In both cases the p-values are still less than 0.05, indicating that the residuals are not normally distributed and heteroscedasticity is still present. This implies that the Box-Cox transformation did not improve the model.
+
+
+
+\newpage
+
+# Conclusions and Recommendation
+
+Heating Load and Cooling load, our two response variables are highly correlated. Consequently, finding a model that fits one of them will lead to the model for the second. In terms of the predictors, the compactness of a building, the wall area, the overall high, the percentage of windows (glazing area), and the distribution of the windows have a higher impact on the Heating Load (response variable) than the roof area and orientation of the building.
+
+
+Even though the glazing area and its distribution are slightly correlated to each other, they are uncorrelated with the other attributes of the building, which made them good predictors for the model. In regards to the roofing area, it has some impact in the Heating Load. But since it is highly correlated with other features, it is safe to leave this term out of the model. 
+
+
+It could be observed that the first order model wouldn't be the best model for prediction and that the impact of the predictors wall area(X3) and Compactness(X1) was better described with high order terms. With respect to the interactions, it was observed that the interactions of the compactness of the building with some other variables like the glazing area and overall height have a moderate effect on the heating load.  
+
+
+The main challenge we encountered was that after finding a model using the methods learnt in this course, the model did not meet the assumptions for linear regression. Even after transformations were performed, the model still presented normality and heteroscedasticity issues. Therefore, the forecast accuracy may be distorted when using this model.
+
+
+There are several ways in which this data can be modeled for predictive purposes. Some of them involve exploring alternative regression models such as robust regression or PLS, which might improve the model and potentially allow for a more practical prediction of the Heating Load.
+
+\newpage
+
+# References
+
+
+[1]	L. Pérez-Lombard, J. Ortiz, C. Pout, A review on buildings energy consumption information, Energy      Build. 40 (3) (2008) 394–398.
+
+[2]	K. Kavyalola, Robust modeling of heating and cooling loads using partial least squares towards         efficient residential building design. Journal of Building Engineering 18 (2018) 467–475.
+
+[3]	UC Irvine Machine learning repository. Energy Efficiency Dataset.                                      https://archive.ics.uci.edu/dataset/242/energy+efficiency
+
+[4]	A. Tsana's, A. Xiara, Accurate quantitative estimation of energy performance of residential            buildings using statistical machine learning tools, Energy Build. 49 (2012) 560–567.
+
